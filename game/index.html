@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ember Isle Run — Best Flight Game</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0b1c2c; }
+  body { font-family: "Segoe UI", system-ui, -apple-system, Arial, sans-serif; color: #eaf2f8; }
+  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #ui { position: fixed; inset: 0; pointer-events: none; }
+
+  /* --- HUD panels: dark glass, amber numbers, readable at 768x480 --- */
+  .hud { position: absolute; inset: 0; }
+  .hud.dim .panel, .hud.dim .target, .hud.dim .hint { opacity: 0.25; }
+  .panel {
+    position: absolute; background: rgba(8, 20, 32, 0.72);
+    border: 1px solid rgba(255, 211, 77, 0.35); border-radius: 10px;
+    padding: 8px 12px; backdrop-filter: blur(2px);
+    box-shadow: 0 2px 12px rgba(0,0,0,0.45);
+  }
+  .label { font-size: 11px; letter-spacing: 2px; color: #9fc3e2; font-weight: 700; }
+  .big { font-size: 44px; line-height: 1; font-weight: 800; color: #ffd34d;
+    font-variant-numeric: tabular-nums; text-shadow: 0 0 14px rgba(255, 211, 77, 0.45); }
+  .unit { font-size: 11px; letter-spacing: 2px; color: #9fc3e2; font-weight: 700; }
+  .sub { font-size: 13px; font-weight: 700; color: #cfe6f7; margin-top: 3px;
+    font-variant-numeric: tabular-nums; }
+  .alt-box { top: 14px; left: 14px; min-width: 158px; }
+  .spd-box { top: 14px; right: 14px; min-width: 158px; text-align: right; }
+  .hdg-box { top: 14px; left: 50%; transform: translateX(-50%); min-width: 250px; text-align: center; }
+  .hor-box { bottom: 14px; left: 14px; text-align: center; }
+  .horizon { display: block; width: 150px; height: 150px; margin-top: 4px; }
+  .sys-box { bottom: 14px; right: 14px; width: 218px; }
+  .row { display: flex; justify-content: space-between; align-items: baseline; }
+  .bar { height: 10px; background: rgba(255,255,255,0.14); border-radius: 5px;
+    overflow: hidden; margin: 3px 0 8px; }
+  .bar-fill { height: 100%; border-radius: 5px; }
+  .fuel-fill { background: linear-gradient(90deg, #37b24d, #94d82d); width: 100%; }
+  .fuel-fill.low { background: linear-gradient(90deg, #e8590c, #f03e3e); }
+  .dmg-fill { background: linear-gradient(90deg, #f59f00, #e03131); width: 0%; }
+  .rings { font-size: 19px; font-weight: 800; color: #ffd34d; margin-top: 2px;
+    font-variant-numeric: tabular-nums; }
+  .score { font-size: 17px; font-weight: 800; color: #7ee2a8; margin-top: 2px;
+    font-variant-numeric: tabular-nums; }
+
+  /* Compass strip */
+  .compass { position: relative; height: 22px; margin-top: 4px; overflow: hidden;
+    border-top: 1px solid rgba(255,255,255,0.25); }
+  .compass-inner { position: absolute; inset: 0; }
+  .compass-inner span { position: absolute; transform: translateX(-50%);
+    font-size: 13px; font-weight: 800; color: #cfe6f7; top: 3px; }
+  .compass::after { content: "▼"; position: absolute; left: 50%; top: -2px;
+    transform: translateX(-50%); color: #ffd34d; font-size: 12px; }
+
+  /* Throttle bar */
+  .thr-bar { height: 8px; background: rgba(255,255,255,0.14); border-radius: 4px;
+    overflow: hidden; margin-top: 6px; }
+  .thr-fill { height: 100%; background: #4dabf7; width: 0%; }
+
+  /* Centre target pointer */
+  .target { position: absolute; top: 132px; left: 50%; transform: translateX(-50%);
+    text-align: center; }
+  .target-arrow { font-size: 34px; color: #ffd34d; line-height: 1;
+    text-shadow: 0 0 12px rgba(255, 211, 77, 0.8); transition: transform 0.1s linear; }
+  .target-label { font-size: 15px; font-weight: 800; color: #ffd34d; letter-spacing: 1px; }
+  .target-dist { font-size: 15px; font-weight: 700; color: #fff; }
+
+  /* Flash message + warning */
+  .flash { position: absolute; top: 38%; left: 50%; transform: translate(-50%, -50%);
+    font-size: 34px; font-weight: 900; color: #ffd34d; letter-spacing: 1px;
+    text-shadow: 0 2px 18px rgba(0,0,0,0.8), 0 0 30px rgba(255,211,77,0.6);
+    opacity: 0; transition: opacity 0.15s; text-align: center; white-space: nowrap; }
+  .flash.on { opacity: 1; }
+  .warn { position: absolute; top: 172px; left: 50%; transform: translateX(-50%);
+    font-size: 18px; font-weight: 800; color: #ff6b6b; opacity: 0;
+    text-shadow: 0 2px 10px rgba(0,0,0,0.8); white-space: nowrap; }
+  .warn.on { opacity: 1; animation: blink 0.7s steps(2) infinite; }
+  @keyframes blink { 50% { opacity: 0.25; } }
+
+  .hint { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+    font-size: 12.5px; font-weight: 600; color: rgba(234, 242, 248, 0.85);
+    background: rgba(8, 20, 32, 0.55); padding: 5px 12px; border-radius: 20px;
+    white-space: nowrap; }
+
+  /* In shot mode the menu card hugs the left so the parked plane shows right */
+  #ui.shot-menu .menu { justify-content: flex-start; padding-left: 56px; }
+
+  /* --- Overlays --- */
+  .overlay { position: absolute; inset: 0; display: flex; align-items: center;
+    justify-content: center; pointer-events: auto; }
+  .hidden { display: none !important; }
+  .card { background: rgba(8, 22, 34, 0.86); border: 1px solid rgba(255, 211, 77, 0.5);
+    border-radius: 16px; padding: 30px 38px; text-align: center; max-width: 620px;
+    box-shadow: 0 10px 50px rgba(0,0,0,0.6); }
+  .kicker { font-size: 12px; letter-spacing: 3px; color: #9fc3e2; font-weight: 800; }
+  .title { font-size: 52px; font-weight: 900; color: #ffd34d; letter-spacing: 2px;
+    margin: 6px 0 4px; text-shadow: 0 0 24px rgba(255, 211, 77, 0.5); }
+  .tagline { font-size: 16px; color: #d6e7f5; margin-bottom: 16px; }
+  .mission { text-align: left; margin: 0 auto 18px; display: inline-block; }
+  .mission-line { font-size: 15.5px; font-weight: 600; color: #eaf2f8; margin: 5px 0; }
+  .btn { pointer-events: auto; cursor: pointer; font-size: 19px; font-weight: 800;
+    letter-spacing: 1px; color: #12202e; background: #ffd34d; border: none;
+    border-radius: 10px; padding: 13px 30px; box-shadow: 0 4px 0 #b98a12; }
+  .btn:active { transform: translateY(3px); box-shadow: 0 1px 0 #b98a12; }
+  .controls { margin-top: 16px; font-size: 13px; color: #9fc3e2; font-weight: 600; }
+  .stats { margin: 10px 0 18px; }
+  .stat-line { font-size: 18px; font-weight: 700; color: #eaf2f8; margin: 4px 0; }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three.module.min.js"
+  }
+}
+</script>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="ui"></div>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
