@@ -74,11 +74,27 @@ function terrainColor(x, z, h, out) {
   const slope = Math.abs(heightAt(x + 6, z) - h) + Math.abs(heightAt(x, z + 6) - h);
   const crater = Math.hypot(x - WORLD.volcano.x, z - WORLD.volcano.z);
   if (h < 4.5) return out.setRGB(0.86, 0.78, 0.55); // beach sand
-  if (crater < 90) return out.setRGB(0.23, 0.2, 0.19); // ash near the crater
+  if (crater < 120) return out.setRGB(0.23, 0.2, 0.19); // ash near the crater
   if (h > 150 || slope > 9) return out.setRGB(0.32, 0.29, 0.27); // bare rock
   if (h > 90) return out.setRGB(0.36, 0.5, 0.24); // high scrub
   const g = 0.42 + 0.1 * smoothNoise(x, z, 90);
   return out.setRGB(0.24, g, 0.2); // valley grass, gently varied
+}
+
+// Soft radial gradient texture (hot core → orange → transparent) for the
+// lava glow sprite. Drawn once per load; identical every time.
+function makeRadialTexture() {
+  const c = document.createElement('canvas');
+  c.width = 128;
+  c.height = 128;
+  const g = c.getContext('2d');
+  const grad = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  grad.addColorStop(0, 'rgba(255, 220, 150, 1)');
+  grad.addColorStop(0.35, 'rgba(255, 140, 50, 0.55)');
+  grad.addColorStop(1, 'rgba(255, 90, 20, 0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 128, 128);
+  return new THREE.CanvasTexture(c);
 }
 
 export function buildWorld(scene) {
@@ -114,10 +130,14 @@ export function buildWorld(scene) {
   group.add(terrain);
 
   // --- Sea -------------------------------------------------------------------
+  // Roughness 0.5 (was 0.18): the Blinn-Phong specular lobe is tight and
+  // mirror-bright on a near-flat sea, so the low sun painted a blown white
+  // column across the landing approach. A rougher sea spreads the same
+  // light into a soft sheen — the water still reads as water.
   const sea = new THREE.Mesh(
     new THREE.PlaneGeometry(size * 2.4, size * 2.4),
     new THREE.MeshStandardMaterial({
-      color: 0x1d6f8e, roughness: 0.18, metalness: 0.1,
+      color: 0x1d6f8e, roughness: 0.5, metalness: 0.0,
       transparent: true, opacity: 0.94,
     }),
   );
@@ -220,17 +240,77 @@ export function buildWorld(scene) {
   canopies.castShadow = true;
   group.add(trunks, canopies);
 
-  // --- Volcano crater: glowing lava disc --------------------------------------
+  // --- Volcano: frustum cone, glowing crater, smoke -------------------------
+  // The terrain bump alone reads as a green hill, so the cone is built as a
+  // separate steep frustum (flat crater top, faceted basalt flanks) with a
+  // lava disc, a glowing rim and a smoke plume — the three things that say
+  // "volcano" at contact-sheet size. The glow is the cheap half of the
+  // guide's bloom (bright-pass + blur + add): the lava disc is the bright
+  // source, the additive radial sprite is the blur + add. Every position
+  // derives from heightAt + constants, so the assembly is deterministic
+  // and never touches the flight collision (heightAt is unchanged).
+  const peakY = heightAt(WORLD.volcano.x, WORLD.volcano.z);
+  const coneH = 150;
+  const coneTopY = peakY + 70; // tip stands ~70 m above the broad bump —
+  // low enough that the crater sits below the top-centre HUD panel in the
+  // cover/rings chase shots, so the glowing crater is actually visible.
+  const cone = new THREE.Mesh(
+    new THREE.CylinderGeometry(20, 140, coneH, 24, 1),
+    // Warm mid-brown basalt (the terrain's bare-rock family), not near-black:
+    // the sun sits behind the cone from the usual chase angles, so the
+    // camera-facing flank is lit only by sky fill and must not crush to black.
+    new THREE.MeshStandardMaterial({ color: 0x55483f, roughness: 1, metalness: 0, flatShading: true }),
+  );
+  cone.position.set(WORLD.volcano.x, coneTopY - coneH / 2, WORLD.volcano.z);
+  cone.name = 'volcanoCone';
+  group.add(cone);
+  // Lava disc on the flat crater top (fog off: it must stay hot at distance).
   const lava = new THREE.Mesh(
-    new THREE.CircleGeometry(34, 24),
+    new THREE.CircleGeometry(26, 24),
     new THREE.MeshBasicMaterial({ color: 0xff5a1e, fog: false }),
   );
   lava.rotation.x = -Math.PI / 2;
-  lava.position.set(WORLD.volcano.x, heightAt(WORLD.volcano.x, WORLD.volcano.z) + 1.5, WORLD.volcano.z);
+  lava.position.set(WORLD.volcano.x, coneTopY + 0.6, WORLD.volcano.z);
   lava.name = 'lavaPool';
   group.add(lava);
+  // Glowing crater rim.
+  const rim = new THREE.Mesh(
+    new THREE.TorusGeometry(25, 4, 10, 32),
+    new THREE.MeshBasicMaterial({ color: 0xff8c2e, fog: false }),
+  );
+  rim.rotation.x = Math.PI / 2;
+  rim.position.set(WORLD.volcano.x, coneTopY + 1, WORLD.volcano.z);
+  rim.name = 'craterRim';
+  group.add(rim);
+  // Soft additive glow above the crater.
+  const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: makeRadialTexture(), color: 0xff7a2a, transparent: true, opacity: 0.85,
+    blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
+  }));
+  glow.scale.set(240, 240, 1);
+  glow.position.set(WORLD.volcano.x, coneTopY + 28, WORLD.volcano.z);
+  glow.name = 'lavaGlow';
+  group.add(glow);
+  // Smoke plume: stacked flattened puffs, rising and drifting east. Static
+  // (deterministic by construction); fog on, so it hazes naturally far away.
+  for (let i = 0; i < 6; i++) {
+    const puff = new THREE.Mesh(
+      new THREE.SphereGeometry(13 + i * 4.5, 10, 8),
+      new THREE.MeshBasicMaterial({
+        color: 0x8f9599, transparent: true, opacity: 0.3 - i * 0.035, fog: true,
+      }),
+    );
+    puff.position.set(
+      WORLD.volcano.x + 10 + i * 9,
+      coneTopY + 30 + i * 26,
+      WORLD.volcano.z - 4 - i * 2,
+    );
+    puff.scale.y = 0.55;
+    puff.name = 'smokePuff';
+    group.add(puff);
+  }
   const lavaLight = new THREE.PointLight(0xff6a2a, 60, 260, 1.6);
-  lavaLight.position.copy(lava.position).y += 18;
+  lavaLight.position.set(WORLD.volcano.x, coneTopY + 20, WORLD.volcano.z);
   group.add(lavaLight);
 
   // --- Runway: asphalt strip, dashes, threshold, edge lights, windsock -------

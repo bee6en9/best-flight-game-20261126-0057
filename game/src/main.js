@@ -28,7 +28,7 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0x9fc3e2, 700, 3400);
+scene.fog = new THREE.Fog(0x9fc3e2, 650, 3300); // linear fog: near/far haze for depth
 const camera = new THREE.PerspectiveCamera(CAMERA.fovBase, window.innerWidth / window.innerHeight, 0.5, 9000);
 camera.position.set(0, 40, 820);
 
@@ -47,6 +47,13 @@ sun.shadow.bias = -0.0004;
 sun.shadow.normalBias = 0.6;
 scene.add(sun);
 scene.add(sun.target);
+// Warm fill from the south-east (camera side): lifts the shadowed flanks
+// of the volcano and terrain out of blackness — the rim-light idea from
+// the shader guide, as a light rather than a fresnel term. No shadows.
+const fill = new THREE.DirectionalLight(0xffe0b0, 0.55);
+fill.position.set(800, 500, 900);
+scene.add(fill);
+scene.add(fill.target);
 scene.add(new THREE.HemisphereLight(0xbfd9ff, 0x4a5a3a, 0.9));
 
 // --- World, plane, rings ------------------------------------------------------
@@ -250,6 +257,8 @@ function frame() {
   // The shadow frustum follows the plane so shadows stay crisp.
   sun.position.set(state.x - 900, 700, state.z - 1400);
   sun.target.position.set(state.x, 0, state.z);
+  fill.position.set(state.x + 800, 500, state.z + 900);
+  fill.target.position.set(state.x, 0, state.z);
   const shake = feedback.shakeOffset(realDt);
   if (isShot) {
     const fixed = shotCamera(shotName, state);

@@ -58,13 +58,19 @@
     overflow: hidden; margin-top: 6px; }
   .thr-fill { height: 100%; background: #4dabf7; width: 0%; }
 
-  /* Centre target pointer */
+  /* Centre target pointer — dark pill backing so the label stays readable
+     when a bright 3D object (next ring's beacon diamond, sun, cloud) sits
+     directly behind the text. */
   .target { position: absolute; top: 132px; left: 50%; transform: translateX(-50%);
-    text-align: center; }
+    text-align: center; background: rgba(8, 20, 32, 0.72);
+    border: 1px solid rgba(255, 211, 77, 0.35); border-radius: 10px; padding: 6px 12px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.45); }
   .target-arrow { font-size: 34px; color: #ffd34d; line-height: 1;
     text-shadow: 0 0 12px rgba(255, 211, 77, 0.8); transition: transform 0.1s linear; }
-  .target-label { font-size: 15px; font-weight: 800; color: #ffd34d; letter-spacing: 1px; }
-  .target-dist { font-size: 15px; font-weight: 700; color: #fff; }
+  .target-label { font-size: 15px; font-weight: 800; color: #ffd34d; letter-spacing: 1px;
+    text-shadow: 0 1px 6px rgba(0,0,0,0.9); }
+  .target-dist { font-size: 15px; font-weight: 700; color: #fff;
+    text-shadow: 0 1px 6px rgba(0,0,0,0.9); }
 
   /* Flash message + warning */
   .flash { position: absolute; top: 38%; left: 50%; transform: translate(-50%, -50%);

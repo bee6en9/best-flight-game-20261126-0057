@@ -90,7 +90,7 @@ export const CAMERA = {
 
 // --- Deterministic screenshot states (?shot=cover|rings|landing|menu) -------
 export const SHOTS = {
-  cover: { ring: 2, speedKts: 118, altitudeM: 96, bankDeg: -14, pitchDeg: -2 },
+  cover: { ring: 4, speedKts: 118, altitudeM: 96, bankDeg: -14, pitchDeg: -2 },
   rings: { ring: 4, speedKts: 132, altitudeM: 88, bankDeg: 8, pitchDeg: 0 },
   landing: { ring: 8, speedKts: 62, altitudeM: 20, bankDeg: 0, pitchDeg: -4 },
   menu: { ring: 0, speedKts: 0, altitudeM: 3.2, bankDeg: 0, pitchDeg: 0 },
